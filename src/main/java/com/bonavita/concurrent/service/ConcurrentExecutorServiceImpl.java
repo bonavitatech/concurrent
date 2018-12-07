@@ -4,6 +4,7 @@
 package com.bonavita.concurrent.service;
 
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -13,6 +14,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+
+import javax.annotation.PostConstruct;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,11 +53,11 @@ public class ConcurrentExecutorServiceImpl implements ConcurrentExecutorService 
             }
         });
 		
-		scheduler.scheduleWithFixedDelay(new ScheduledTask(), 0l, 60, TimeUnit.SECONDS);
+		this.scheduler.scheduleWithFixedDelay(new ScheduledTask(), 0l, 120, TimeUnit.SECONDS);
 	}
 	
 	public ConcurrentExecutorServiceImpl() {
-		init();
+		
 	}
 	
 	public ConcurrentExecutorServiceImpl(int corePoolSize, int maximumPoolSize, int keepAliveSecs, int timeOutSecs) {
@@ -62,7 +65,6 @@ public class ConcurrentExecutorServiceImpl implements ConcurrentExecutorService 
 		this.maximumPoolSize = maximumPoolSize;
 		this.keepAliveSecs = keepAliveSecs;
 		this.timeOutSecs = timeOutSecs;
-		init();
 	}
 	
 	@Override
@@ -84,6 +86,11 @@ public class ConcurrentExecutorServiceImpl implements ConcurrentExecutorService 
 		return pool.submit(method);
 	}
 	
+	@Override
+  public <T> Future<T> submit(Callable<T> callable) {
+    return pool.submit(callable);
+  }
+	
 	public void setCorePoolSize(int corePoolSize) {
 		this.corePoolSize = corePoolSize;
 	}
@@ -100,6 +107,7 @@ public class ConcurrentExecutorServiceImpl implements ConcurrentExecutorService 
 		this.timeOutSecs = timeOutSecs;
 	}
 	
+	@PostConstruct
 	private void init() {
 		this.pool = new ThreadPoolExecutor(corePoolSize, maximumPoolSize, 
 			keepAliveSecs, TimeUnit.SECONDS, new SynchronousQueue<Runnable>(), new NamedThreadFactory(ConcurrentExecutorService.class.getSimpleName()), 
@@ -144,25 +152,28 @@ public class ConcurrentExecutorServiceImpl implements ConcurrentExecutorService 
 		
 		@Override
 		public void run() {
-			
-			logPoolStats();
-			
-			int cpsNew = parsePropertyValue("pool.corePoolSize");
-			if(isChanged(corePoolSize, cpsNew)) {
-				pool.setCorePoolSize(cpsNew);
-				LOG.info("corePoolSize changed to {}", cpsNew);
-			}
-			
-			int mpsNew = parsePropertyValue("pool.maxPoolSize");
-			if(isChanged(maximumPoolSize, mpsNew)) {
-				pool.setMaximumPoolSize(mpsNew);
-				LOG.info("maxPoolSize changed to {}", mpsNew);
-			}
-			
-			int kasNew = parsePropertyValue("pool.keepAliveSecs");
-			if(isChanged(keepAliveSecs, kasNew)) {
-				pool.setKeepAliveTime(kasNew, TimeUnit.SECONDS);
-				LOG.info("keepAliveSecs changed to {}", kasNew);
+			try {
+    			logPoolStats();
+    			
+    			int cpsNew = parsePropertyValue("pool.corePoolSize");
+    			if(isChanged(corePoolSize, cpsNew)) {
+    				pool.setCorePoolSize(cpsNew);
+    				LOG.info("corePoolSize changed to {}", cpsNew);
+    			}
+    			
+    			int mpsNew = parsePropertyValue("pool.maxPoolSize");
+    			if(isChanged(maximumPoolSize, mpsNew)) {
+    				pool.setMaximumPoolSize(mpsNew);
+    				LOG.info("maxPoolSize changed to {}", mpsNew);
+    			}
+    			
+    			int kasNew = parsePropertyValue("pool.keepAliveSecs");
+    			if(isChanged(keepAliveSecs, kasNew)) {
+    				pool.setKeepAliveTime(kasNew, TimeUnit.SECONDS);
+    				LOG.info("keepAliveSecs changed to {}", kasNew);
+    			}
+			} catch(Exception ex) {
+			  LOG.error("Exception while running scheduled task for emitting pool stats {}", ex);
 			}
 		}
 		

@@ -11,6 +11,7 @@ import java.util.concurrent.Callable;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 /**
  * @author mukesh
@@ -39,27 +40,40 @@ public class MethodTaskCallable<T> implements Callable<T> {
 	private T result;
 	private boolean isSuccessful;
 	private Exception exception;
+	private Map<String, String> previousContext;
 	
 	public MethodTaskCallable(String methodName, Object service, Object... args) {
 		this.methodName = methodName;
 		this.service = service;
 		this.args = args;
+		this.previousContext = MDC.getCopyOfContextMap();
 	}
 
 	@Override
 	public T call() throws Exception {
+	  if(previousContext != null) {
+	    MDC.setContextMap(previousContext);
+	  }
 		T result = null;
 		try {
 			Method method = getMethod(methodName, service, args);
-			Object[] formatArgs = formatArgs(method, args);
-			Object response = method.invoke(service, formatArgs);
-			if(response != null) {
-				result = (T) response;
+			if(method == null) {
+			  LOG.error("no method found with name {}", methodName);
+			} else {
+    			Object[] formatArgs = formatArgs(method, args);
+    			Object response = method.invoke(service, formatArgs);
+    			if(response != null) {
+    				result = (T) response;
+    			}
+    			this.isSuccessful = true;
 			}
-			this.isSuccessful = true;
+			
 		} catch(Exception e) {
 			LOG.error("error executing method " + methodName, e);
 			this.exception = e;
+			throw e;
+		} finally {
+		  MDC.clear();
 		}
 		return result;
 	}
@@ -116,6 +130,8 @@ public class MethodTaskCallable<T> implements Callable<T> {
 		Class[] paramTypes = m.getParameterTypes();
 		if(paramTypes.length <= args.length) {
 			boolean isVarArgs = m.isVarArgs();
+			if(!isVarArgs && paramTypes.length != args.length)
+			  return false;
 			for(int i=0; i<paramTypes.length; i++) {
 				if(isVarArgs && i == paramTypes.length-1) {
 					Class clazz = paramTypes[i].getComponentType();
